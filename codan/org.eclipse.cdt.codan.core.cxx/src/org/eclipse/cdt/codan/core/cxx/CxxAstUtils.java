@@ -451,8 +451,7 @@ public final class CxxAstUtils {
 		}
 		// Fast path: avoid resolution of parameter types.
 		if (func instanceof ICPPASTFunctionDefinition) {
-			return CPPVisitor.createType(declarator,
-					CPPVisitor.RESOLVE_PLACEHOLDERS | CPPVisitor.ONLY_RETURN_TYPE);
+			return CPPVisitor.createType(declarator, CPPVisitor.RESOLVE_PLACEHOLDERS | CPPVisitor.ONLY_RETURN_TYPE);
 		}
 		return CVisitor.createType(declarator, CVisitor.ONLY_RETURN_TYPE);
 	}
