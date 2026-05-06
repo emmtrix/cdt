@@ -438,13 +438,22 @@ public final class CxxAstUtils {
 
 	@SuppressWarnings("restriction")
 	public static IType getReturnType(IASTFunctionDefinition func) {
-		// We could do this with public API (func.getDeclarator().getName().resolveBinding().getType()
-		// .getReturnType()), but that would trigger resolution of the parameter types as well,
-		// which is needless extra work.
+		IASTFunctionDeclarator declarator = func.getDeclarator();
+		// When the function declarator is nested inside another declarator, e.g.
+		//   int (*functionFactory(int n))(int, int)
+		// the ONLY_RETURN_TYPE optimization does not correctly compute the return type.
+		// In that case, use the public API via the binding's function type.
+		if (declarator.getParent() instanceof IASTDeclarator) {
+			IBinding binding = declarator.getName().resolveBinding();
+			if (binding instanceof IFunction) {
+				return ((IFunction) binding).getType().getReturnType();
+			}
+		}
+		// Fast path: avoid resolution of parameter types.
 		if (func instanceof ICPPASTFunctionDefinition) {
-			return CPPVisitor.createType(func.getDeclarator(),
+			return CPPVisitor.createType(declarator,
 					CPPVisitor.RESOLVE_PLACEHOLDERS | CPPVisitor.ONLY_RETURN_TYPE);
 		}
-		return CVisitor.createType(func.getDeclarator(), CVisitor.ONLY_RETURN_TYPE);
+		return CVisitor.createType(declarator, CVisitor.ONLY_RETURN_TYPE);
 	}
 }
