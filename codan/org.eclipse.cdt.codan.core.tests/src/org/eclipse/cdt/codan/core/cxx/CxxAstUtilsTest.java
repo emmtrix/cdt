@@ -21,14 +21,19 @@ import org.eclipse.cdt.core.dom.ast.ASTVisitor;
 import org.eclipse.cdt.core.dom.ast.IASTDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTExpressionStatement;
+import org.eclipse.cdt.core.dom.ast.IASTFunctionDefinition;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNamedTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTSimpleDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTStatement;
 import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
+import org.eclipse.cdt.core.dom.ast.IBasicType;
 import org.eclipse.cdt.core.dom.ast.IBasicType.Kind;
+import org.eclipse.cdt.core.dom.ast.IFunctionType;
+import org.eclipse.cdt.core.dom.ast.IPointerType;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.c.ICBasicType;
+import org.eclipse.cdt.core.parser.ParserLanguage;
 
 /**
  * Test CxxAstUtils
@@ -135,5 +140,61 @@ public class CxxAstUtilsTest extends CodanFastCxxAstTestCase {
 		assertFalse((Boolean) result[1]);
 		assertTrue((Boolean) result[2]);
 		assertTrue((Boolean) result[3]);
+	}
+
+	// int addInt(int n, int m) { return n+m; }
+	// int (*functionFactory(int n))(int, int) {
+	//     int (*functionPtr)(int,int) = &addInt;
+	//     return functionPtr;
+	// }
+	public void testGetReturnTypeOfFunctionReturningFunctionPointerC() throws IOException {
+		checkGetReturnTypeOfFunctionReturningFunctionPointer(ParserLanguage.C);
+	}
+
+	// int addInt(int n, int m) { return n+m; }
+	// int (*functionFactory(int n))(int, int) {
+	//     int (*functionPtr)(int,int) = &addInt;
+	//     return functionPtr;
+	// }
+	public void testGetReturnTypeOfFunctionReturningFunctionPointerCpp() throws IOException {
+		checkGetReturnTypeOfFunctionReturningFunctionPointer(ParserLanguage.CPP);
+	}
+
+	private void checkGetReturnTypeOfFunctionReturningFunctionPointer(ParserLanguage lang) throws IOException {
+		String code = getAboveComment();
+		IASTTranslationUnit tu = parse(code, lang, true);
+		final IASTFunctionDefinition[] funcDef = new IASTFunctionDefinition[1];
+		tu.accept(new ASTVisitor() {
+			{
+				shouldVisitDeclarations = true;
+			}
+
+			@Override
+			public int visit(IASTDeclaration decl) {
+				if (decl instanceof IASTFunctionDefinition) {
+					IASTFunctionDefinition fdef = (IASTFunctionDefinition) decl;
+					if (new String(fdef.getDeclarator().getName().toCharArray()).equals("functionFactory")) { //$NON-NLS-1$
+						funcDef[0] = fdef;
+					}
+				}
+				return PROCESS_CONTINUE;
+			}
+		});
+		assertNotNull("functionFactory definition not found", funcDef[0]); //$NON-NLS-1$
+
+		IType returnType = CxxAstUtils.getReturnType(funcDef[0]);
+
+		// The return type of functionFactory should be int (*)(int, int),
+		// i.e. a pointer to a function taking two ints and returning int.
+		assertTrue("Return type should be a pointer type, but was: " + returnType, //$NON-NLS-1$
+				returnType instanceof IPointerType);
+		IType pointedTo = ((IPointerType) returnType).getType();
+		assertTrue("Pointed-to type should be a function type, but was: " + pointedTo, //$NON-NLS-1$
+				pointedTo instanceof IFunctionType);
+		IFunctionType innerFt = (IFunctionType) pointedTo;
+		assertEquals("Returned function type should have 2 parameters", 2, innerFt.getParameterTypes().length); //$NON-NLS-1$
+		assertTrue("Returned function type should return int", //$NON-NLS-1$
+				innerFt.getReturnType() instanceof IBasicType
+						&& ((IBasicType) innerFt.getReturnType()).getKind() == Kind.eInt);
 	}
 }
